@@ -1,0 +1,1703 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>學校活動室預約系統 Campus Space Hub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        [v-cloak] { display: none; }
+        body { font-family: 'Noto Sans TC', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <div id="app" v-cloak class="min-h-screen flex flex-col">
+
+        <!-- Header -->
+        <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+            <div class="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+                <div class="flex items-center space-x-2 cursor-pointer" @click="currentTab = 'schedule'">
+                    <div class="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-sm">
+                        <i class="fa-solid fa-school"></i>
+                    </div>
+                    <span class="font-bold text-base text-slate-800">校園活動室預約</span>
+                </div>
+
+                <!-- Nav Buttons -->
+                <div class="flex items-center space-x-2 text-xs font-semibold">
+                    <button @click="currentTab = 'schedule'" :class="currentTab === 'schedule' ? 'bg-indigo-50 text-indigo-600 font-bold' : 'text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-lg transition">
+                        <i class="fa-regular fa-calendar-days mr-1"></i>預約時段表
+                    </button>
+                    <button @click="currentTab = 'admin'" :class="currentTab === 'admin' ? 'bg-indigo-50 text-indigo-600 font-bold' : 'text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-lg transition relative">
+                        <i class="fa-solid fa-lock mr-1"></i>管理後台
+                    </button>
+                    <button @click="openBookingModal('single')" class="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+                        <i class="fa-solid fa-plus mr-1"></i>新增預約
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Toast Alert -->
+        <div v-if="toast.show" :class="toast.type === 'error' ? 'bg-rose-600' : 'bg-emerald-600'" class="fixed bottom-4 right-4 z-50 text-white px-4 py-2 rounded-lg shadow-lg text-xs font-medium flex items-center space-x-2">
+            <i class="fa-solid" :class="toast.type === 'error' ? 'fa-triangle-exclamation' : 'fa-circle-check'"></i>
+            <span>{{ toast.message }}</span>
+        </div>
+
+        <main class="flex-1 max-w-6xl w-full mx-auto p-4 space-y-4">
+
+            <!-- Simplified Date & View Bar -->
+            <div v-if="currentTab === 'schedule'" class="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
+                <!-- Navigation & Date Selector -->
+                <div class="flex items-center space-x-2 flex-wrap gap-y-2">
+                    <!-- View Mode Buttons (Day / Week / Month) -->
+                    <div class="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50 mr-2">
+                        <button @click="viewMode = 'day'" :class="viewMode === 'day' ? 'bg-indigo-600 text-white font-bold shadow-xs' : 'text-slate-600 hover:text-slate-900'" class="px-2.5 py-1 rounded-md text-xs transition">
+                            <i class="fa-solid fa-calendar-day mr-1"></i>日
+                        </button>
+                        <button @click="viewMode = 'week'" :class="viewMode === 'week' ? 'bg-indigo-600 text-white font-bold shadow-xs' : 'text-slate-600 hover:text-slate-900'" class="px-2.5 py-1 rounded-md text-xs transition">
+                            <i class="fa-solid fa-calendar-week mr-1"></i>周
+                        </button>
+                        <button @click="viewMode = 'month'" :class="viewMode === 'month' ? 'bg-indigo-600 text-white font-bold shadow-xs' : 'text-slate-600 hover:text-slate-900'" class="px-2.5 py-1 rounded-md text-xs transition">
+                            <i class="fa-solid fa-calendar-days mr-1"></i>月
+                        </button>
+                    </div>
+
+                    <!-- Date Controls -->
+                    <button @click="navigatePeriod(-1)" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center"><i class="fa-solid fa-chevron-left"></i></button>
+                    
+                    <input v-if="viewMode === 'day'" type="date" v-model="selectedDate" class="bg-slate-100 px-3 py-1 rounded-lg border-0 font-bold text-xs">
+                    <span v-else-if="viewMode === 'week'" class="font-bold text-slate-700 px-1">{{ weekRangeText }}</span>
+                    <span v-else-if="viewMode === 'month'" class="font-bold text-slate-700 px-1">{{ currentMonthLabel }}</span>
+
+                    <button @click="navigatePeriod(1)" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center"><i class="fa-solid fa-chevron-right"></i></button>
+                    <button @click="selectedDate = getTodayStr()" class="px-2.5 py-1 text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 font-medium">今天</button>
+                </div>
+
+                <!-- Filters & Enhanced Legend -->
+                <div class="flex items-center space-x-3 text-xs flex-wrap gap-y-2">
+                    <div class="flex items-center space-x-1">
+                        <span class="text-slate-500 font-medium">篩選場地:</span>
+                        <select v-model="selectedRoomFilter" class="bg-slate-100 border-0 rounded-lg px-2 py-1 font-bold text-xs focus:ring-1 focus:ring-indigo-500">
+                            <option value="ALL">全部場地</option>
+                            <option v-for="rm in rooms" :key="rm.id" :value="rm.id">{{ rm.name }}</option>
+                        </select>
+                    </div>
+
+                    <!-- Room Color Legend (Clickable Filter) -->
+                    <div class="flex items-center space-x-2 text-slate-600 text-[11px] overflow-x-auto py-1">
+                        <span class="text-slate-400 font-medium shrink-0"><i class="fa-solid fa-palette mr-1"></i>場地圖例 (點擊篩選):</span>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <button @click="selectedRoomFilter = 'ALL'" 
+                                    :class="selectedRoomFilter === 'ALL' ? 'bg-indigo-600 text-white font-bold shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                                    class="px-2 py-0.5 rounded-full text-[10px] transition cursor-pointer">
+                                全部
+                            </button>
+                            <span v-for="rm in rooms" :key="rm.id" 
+                                  @click="selectedRoomFilter = (selectedRoomFilter === rm.id ? 'ALL' : rm.id)"
+                                  class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[10px] border transition cursor-pointer select-none"
+                                  :class="selectedRoomFilter === rm.id ? 'ring-2 ring-indigo-500 ring-offset-1 scale-105 shadow-xs font-black' : 'opacity-70 hover:opacity-100 hover:scale-102'"
+                                  :style="getRoomBadgeStyle(rm.id)"
+                                  :title="'點擊只查看 ' + rm.name">
+                                <span class="w-2 h-2 rounded-full inline-block shrink-0" :style="{ backgroundColor: rm.color || '#6366f1' }"></span>
+                                <span>{{ rm.name }}</span>
+                                <i v-if="selectedRoomFilter === rm.id" class="fa-solid fa-check text-[9px] ml-0.5 text-indigo-600"></i>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 1. DAY VIEW MATRIX -->
+            <section v-if="currentTab === 'schedule' && viewMode === 'day'" class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse min-w-[700px]">
+                        <thead>
+                            <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 text-[11px] font-bold">
+                                <th class="p-3 w-36 sticky left-0 bg-slate-50 border-r border-slate-200 text-center">時間段</th>
+                                <th v-for="room in displayedRooms" :key="room.id" class="p-2 text-center border-r border-slate-100 min-w-[130px] relative">
+                                    <div class="h-1.5 w-full absolute top-0 left-0" :style="{ backgroundColor: room.color || '#6366f1' }"></div>
+                                    <div class="font-bold text-slate-700 text-[11px] flex items-center justify-center gap-1.5 pt-1">
+                                        <span class="w-2.5 h-2.5 rounded-full inline-block shrink-0" :style="{ backgroundColor: room.color || '#6366f1' }"></span>
+                                        <span class="truncate">{{ room.name }}</span>
+                                    </div>
+                                    <div class="text-[10px] text-slate-400 font-normal">{{ room.capacity }}人</div>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-xs">
+                            <tr v-for="slot in timeSlots" :key="slot.id">
+                                <td class="p-2.5 sticky left-0 bg-white border-r border-slate-200 font-bold text-slate-700 text-center text-[11px]">
+                                    {{ slot.time }}
+                                </td>
+                                <td v-for="room in displayedRooms" :key="room.id" class="p-1 border-r border-slate-100 h-14 text-center">
+                                    <div v-if="getBookingForSlot(room.id, selectedDate, slot.id)" 
+                                         @click="selectedBookingDetail = getBookingForSlot(room.id, selectedDate, slot.id)"
+                                         :style="getRoomStyle(room.id)"
+                                         class="h-full rounded-lg p-1.5 border border-l-4 flex flex-col justify-center items-center cursor-pointer text-[10px] transition hover:shadow-xs hover:brightness-95"
+                                         title="此時段已被預約，點擊查看詳情">
+                                        <div class="font-bold truncate max-w-[100px] text-slate-800">
+                                            {{ getBookingForSlot(room.id, selectedDate, slot.id).applicant }}
+                                        </div>
+                                        <div class="text-[9px] font-medium flex items-center gap-1 mt-0.5 opacity-90">
+                                            <span>{{ getBookingForSlot(room.id, selectedDate, slot.id).department }}</span>
+                                        </div>
+                                    </div>
+                                    <button v-else 
+                                            @click="openBookingModal(room.id, selectedDate, slot.id)" 
+                                            class="h-full w-full rounded-lg border border-dashed border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-slate-300 hover:text-indigo-600 transition flex items-center justify-center text-xs font-bold"
+                                            title="點擊預約此時段">
+                                        +
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 2. WEEK VIEW GRID -->
+            <section v-if="currentTab === 'schedule' && viewMode === 'week'" class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse min-w-[780px]">
+                        <thead>
+                            <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 text-[11px] font-bold">
+                                <th class="p-3 w-32 sticky left-0 bg-slate-50 border-r border-slate-200 text-center">時間段</th>
+                                <th v-for="day in weekDays" :key="day.date" 
+                                    :class="day.isToday ? 'bg-indigo-50/70 text-indigo-700' : ''" 
+                                    class="p-2 text-center border-r border-slate-100 min-w-[110px]">
+                                    <div class="font-bold text-xs">{{ day.shortDate }} (星期{{ day.dayName }})</div>
+                                    <div v-if="day.isToday" class="text-[9px] text-indigo-600 font-semibold">今天</div>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-xs">
+                            <tr v-for="slot in timeSlots" :key="slot.id">
+                                <td class="p-2.5 sticky left-0 bg-white border-r border-slate-200 font-bold text-slate-700 text-center text-[11px]">
+                                    {{ slot.time }}
+                                </td>
+                                <td v-for="day in weekDays" :key="day.date" class="p-1 border-r border-slate-100 min-h-[55px] align-top">
+                                    <div class="space-y-1">
+                                        <div v-for="bk in getBookingsForDateAndSlot(day.date, slot.id, selectedRoomFilter)" :key="bk.id"
+                                             @click="selectedBookingDetail = bk"
+                                             :style="getRoomStyle(bk.roomId)"
+                                             class="p-1.5 rounded-lg border border-l-4 cursor-pointer text-[10px] transition hover:shadow-xs hover:brightness-95 space-y-0.5">
+                                            <div class="flex items-center gap-1">
+                                                <span class="px-1.5 py-0.2 rounded-full text-[8.5px] font-bold text-white shrink-0 truncate max-w-[85px]" :style="{ backgroundColor: getRoomColor(bk.roomId) }">
+                                                    {{ getRoomName(bk.roomId) }}
+                                                </span>
+                                            </div>
+                                            <div class="font-bold text-slate-800 truncate">{{ bk.applicant }}</div>
+                                            <div class="text-[9px] text-slate-500 truncate">{{ bk.department }}</div>
+                                        </div>
+                                        <button @click="openBookingModal(selectedRoomFilter !== 'ALL' ? selectedRoomFilter : null, day.date, slot.id)"
+                                                class="w-full py-1 rounded-md border border-dashed border-slate-200 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50/50 text-[10px] transition font-bold text-center">
+                                            + 預約
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 3. MONTH VIEW CALENDAR -->
+            <section v-if="currentTab === 'schedule' && viewMode === 'month'" class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs p-3 space-y-2">
+                <!-- Month Grid Headers -->
+                <div class="grid grid-cols-7 gap-1 text-center font-bold text-xs text-slate-500 border-b pb-2">
+                    <div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div class="text-indigo-600">六</div><div class="text-indigo-600">日</div>
+                </div>
+
+                <!-- Days Grid -->
+                <div class="grid grid-cols-7 gap-1">
+                    <div v-for="(day, idx) in monthCalendarDays" :key="idx"
+                         :class="[
+                            day.isCurrentMonth ? 'bg-white text-slate-800' : 'bg-slate-50/60 text-slate-300',
+                            day.isToday ? 'ring-2 ring-indigo-500 font-bold' : ''
+                         ]"
+                         class="min-h-[90px] p-1 border rounded-lg border-slate-100 flex flex-col justify-between hover:border-slate-300 transition">
+                        
+                        <div class="flex justify-between items-center text-[10px]">
+                            <span :class="day.isToday ? 'bg-indigo-600 text-white px-1.5 py-0.5 rounded-full' : 'font-bold'">{{ day.dayNum }}</span>
+                            <button v-if="day.isCurrentMonth" @click="openBookingModal(selectedRoomFilter !== 'ALL' ? selectedRoomFilter : null, day.date)" class="text-slate-300 hover:text-indigo-600 text-xs px-1 font-bold" title="預約此日期">+</button>
+                        </div>
+
+                        <!-- Bookings for this day -->
+                        <div class="space-y-1 overflow-y-auto max-h-[60px] my-1 pr-0.5">
+                            <div v-for="bk in getBookingsForDate(day.date, selectedRoomFilter)" :key="bk.id"
+                                 @click="selectedBookingDetail = bk"
+                                 :style="getRoomStyle(bk.roomId)"
+                                 class="px-1.5 py-1 rounded-md text-[9px] border border-l-2 cursor-pointer transition hover:brightness-95 space-y-0.5"
+                                 :title="bk.applicant + ' - ' + getRoomName(bk.roomId)">
+                                <div class="flex items-center gap-1 font-bold truncate text-slate-800">
+                                    <span class="w-2 h-2 rounded-full shrink-0" :style="{ backgroundColor: getRoomColor(bk.roomId) }"></span>
+                                    <span class="truncate">{{ getRoomName(bk.roomId) }}</span>
+                                </div>
+                                <div class="text-[8.5px] text-slate-600 truncate flex justify-between items-center">
+                                    <span class="truncate">{{ bk.applicant }}</span>
+                                    <span class="font-mono text-[8px] text-slate-400 shrink-0 ml-1">{{ getSlotName(bk.timeSlotId).split(' ')[0] }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ADMIN TAB -->
+            <section v-if="currentTab === 'admin'" class="space-y-4">
+                <!-- Login Box -->
+                <div v-if="!isAdminLoggedIn" class="max-w-xs mx-auto my-10 bg-white p-6 rounded-xl border border-slate-200 shadow-xs text-center space-y-3">
+                    <i class="fa-solid fa-user-shield text-3xl text-indigo-600"></i>
+                    <h3 class="font-bold text-slate-800 text-sm">管理員驗證</h3>
+                    <form @submit.prevent="verifyAdminPassword" class="space-y-2">
+                        <input type="password" v-model="inputAdminPassword" placeholder="預設密碼 admin123" class="w-full px-3 py-1.5 border rounded-lg text-xs text-center">
+                        <button type="submit" class="w-full py-1.5 bg-indigo-600 text-white font-bold text-xs rounded-lg hover:bg-indigo-700">登入</button>
+                    </form>
+                </div>
+
+                <!-- Admin Dashboard -->
+                <div v-else class="space-y-4">
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                        <div class="font-bold text-xs text-slate-800 flex items-center space-x-2">
+                            <i class="fa-solid fa-sliders text-indigo-600"></i>
+                            <span>管理員控制台</span>
+                        </div>
+                        <div class="flex items-center space-x-2 text-xs">
+                            <button @click="syncWithGoogleSheets(true)" class="px-3 py-1 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 transition"><i class="fa-solid fa-rotate mr-1"></i>同步 Sheets</button>
+                            <button @click="isAdminLoggedIn = false" class="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition">登出</button>
+                        </div>
+                    </div>
+
+                    <!-- Admin Sub Navigation Tabs -->
+                    <div class="flex border-b border-slate-200 bg-white rounded-xl px-2 pt-2 text-xs font-bold space-x-1 overflow-x-auto">
+                        <button @click="adminSubTab = 'bookings'" :class="adminSubTab === 'bookings' ? 'border-indigo-600 text-indigo-600 border-b-2' : 'text-slate-500 hover:text-slate-800'" class="px-3 py-2 transition shrink-0">
+                            <i class="fa-solid fa-list-check mr-1"></i>預約紀錄
+                        </button>
+                        <button @click="adminSubTab = 'batch'" :class="adminSubTab === 'batch' ? 'border-purple-600 text-purple-600 border-b-2' : 'text-slate-500 hover:text-slate-800'" class="px-3 py-2 transition shrink-0">
+                            <i class="fa-solid fa-layer-group mr-1 text-purple-600"></i>批量預約
+                        </button>
+                        <button @click="adminSubTab = 'rooms'" :class="adminSubTab === 'rooms' ? 'border-indigo-600 text-indigo-600 border-b-2' : 'text-slate-500 hover:text-slate-800'" class="px-3 py-2 transition shrink-0">
+                            <i class="fa-solid fa-door-open mr-1"></i>場地管理
+                        </button>
+                        <button @click="adminSubTab = 'slots'" :class="adminSubTab === 'slots' ? 'border-indigo-600 text-indigo-600 border-b-2' : 'text-slate-500 hover:text-slate-800'" class="px-3 py-2 transition shrink-0">
+                            <i class="fa-solid fa-clock mr-1"></i>時段管理
+                        </button>
+                        <button @click="adminSubTab = 'settings'" :class="adminSubTab === 'settings' ? 'border-indigo-600 text-indigo-600 border-b-2' : 'text-slate-500 hover:text-slate-800'" class="px-3 py-2 transition shrink-0">
+                            <i class="fa-solid fa-gear mr-1"></i>系統設定
+                        </button>
+                    </div>
+
+                    <!-- 1. Bookings List -->
+                    <div v-if="adminSubTab === 'bookings'" class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+                        <div class="p-3 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700 flex flex-wrap justify-between items-center gap-2">
+                            <div class="flex items-center space-x-2">
+                                <span><i class="fa-solid fa-list-check text-indigo-600 mr-1.5"></i>預約紀錄列表</span>
+                                <span class="bg-indigo-100 text-indigo-700 text-[10px] px-2 py-0.5 rounded-full font-bold">共 {{ filteredAdminBookings.length }} 筆</span>
+                            </div>
+                            
+                            <!-- Admin Date Filter & Quick Batch Button -->
+                            <div class="flex items-center space-x-2 flex-wrap gap-y-1 text-xs">
+                                <button @click="adminSubTab = 'batch'" class="px-2.5 py-1 bg-purple-600 text-white rounded-lg text-xs font-bold hover:bg-purple-700 transition flex items-center">
+                                    <i class="fa-solid fa-layer-group mr-1"></i>前往批量預約
+                                </button>
+                                <span class="text-slate-300">|</span>
+                                <span class="text-slate-500 font-medium"><i class="fa-solid fa-filter mr-1"></i>日期篩選:</span>
+                                <select v-model="adminDateFilterType" class="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs focus:ring-1 focus:ring-indigo-500 font-bold text-slate-700">
+                                    <option value="ALL">所有日期</option>
+                                    <option value="TODAY">今天 ({{ getTodayStr() }})</option>
+                                    <option value="UPCOMING">今天及未來預約</option>
+                                    <option value="CUSTOM">指定日期...</option>
+                                </select>
+                                <input v-if="adminDateFilterType === 'CUSTOM'" type="date" v-model="adminFilterDate" class="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-700">
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-slate-100 text-slate-500 font-bold border-b border-slate-200">
+                                    <tr>
+                                        <th class="p-2.5">場地</th>
+                                        <th class="p-2.5">申請人/班級</th>
+                                        <th class="p-2.5">日期時段</th>
+                                        <th class="p-2.5">用途</th>
+                                        <th class="p-2.5 text-center">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    <tr v-for="b in filteredAdminBookings" :key="b.id">
+                                        <td class="p-2.5 font-bold">
+                                            <span class="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px]" :style="getRoomBadgeStyle(b.roomId)">
+                                                <span class="w-2 h-2 rounded-full inline-block" :style="{ backgroundColor: getRoomColor(b.roomId) }"></span>
+                                                <span>{{ getRoomName(b.roomId) }}</span>
+                                            </span>
+                                        </td>
+                                        <td class="p-2.5">{{ b.applicant }} ({{ b.department }})</td>
+                                        <td class="p-2.5">{{ b.date }} {{ getSlotName(b.timeSlotId) }}</td>
+                                        <td class="p-2.5 text-slate-600">{{ b.purpose }}</td>
+                                        <td class="p-2.5 text-center">
+                                            <button @click="deleteBooking(b.id)" class="px-2 py-1 bg-rose-100 text-rose-700 hover:bg-rose-200 rounded text-[10px] font-bold">取消預約</button>
+                                        </td>
+                                    </tr>
+                                    <tr v-if="filteredAdminBookings.length === 0">
+                                        <td colspan="5" class="p-4 text-center text-slate-400">目前沒有符合條件的預約紀錄</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 2. Admin Batch Booking Panel -->
+                    <div v-if="adminSubTab === 'batch'" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+                        <div class="border-b pb-3 flex justify-between items-center flex-wrap gap-2">
+                            <div>
+                                <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                    <i class="fa-solid fa-layer-group text-purple-600"></i>
+                                    <span>管理員批量預約功能</span>
+                                </h3>
+                                <p class="text-slate-500 text-[11px] mt-0.5">可透過週期規則設定或上載 CSV 檔案，一次性新增多筆預約紀錄。</p>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <!-- Mode Switcher -->
+                                <div class="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50 text-xs">
+                                    <button type="button" @click="batchMode = 'form'" :class="batchMode === 'form' ? 'bg-purple-600 text-white font-bold shadow-xs' : 'text-slate-600 hover:text-slate-900'" class="px-3 py-1 rounded-md transition">
+                                        <i class="fa-solid fa-calendar-days mr-1"></i>週期規則預約
+                                    </button>
+                                    <button type="button" @click="batchMode = 'csv'" :class="batchMode === 'csv' ? 'bg-purple-600 text-white font-bold shadow-xs' : 'text-slate-600 hover:text-slate-900'" class="px-3 py-1 rounded-md transition">
+                                        <i class="fa-solid fa-file-csv mr-1"></i>CSV 檔案匯入
+                                    </button>
+                                </div>
+                                <button @click="adminSubTab = 'bookings'" class="text-xs text-indigo-600 hover:text-indigo-800 font-bold">
+                                    <i class="fa-solid fa-arrow-left mr-1"></i>返回預約紀錄
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Mode 1: Rule Form Booking -->
+                        <form v-if="batchMode === 'form'" @submit.prevent="submitBatchBooking" class="space-y-4 text-xs max-w-2xl">
+                            <div>
+                                <label class="block font-bold mb-1 text-slate-700">選擇活動室</label>
+                                <select v-model="batchForm.roomId" required class="w-full px-3 py-2 border rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500 font-bold">
+                                    <option v-for="rm in rooms" :key="rm.id" :value="rm.id">{{ rm.name }} ({{ rm.capacity }}人)</option>
+                                </select>
+                            </div>
+
+                            <!-- Date Range -->
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block font-bold mb-1 text-slate-700">開始日期</label>
+                                    <input type="date" v-model="batchForm.startDate" required class="w-full px-3 py-2 border rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500 font-bold">
+                                </div>
+                                <div>
+                                    <label class="block font-bold mb-1 text-slate-700">結束日期</label>
+                                    <input type="date" v-model="batchForm.endDate" required class="w-full px-3 py-2 border rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500 font-bold">
+                                </div>
+                            </div>
+
+                            <!-- Weekdays Selection -->
+                            <div>
+                                <label class="block font-bold mb-1.5 text-slate-700">重複星期</label>
+                                <div class="flex flex-wrap gap-2">
+                                    <label v-for="wk in weekdayOptions" :key="wk.val" 
+                                           :class="batchForm.weekdays.includes(wk.val) ? 'bg-purple-600 text-white font-bold shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                                           class="px-3 py-1.5 rounded-lg text-xs cursor-pointer transition select-none flex items-center gap-1.5">
+                                        <input type="checkbox" :value="wk.val" v-model="batchForm.weekdays" class="hidden">
+                                        <i v-if="batchForm.weekdays.includes(wk.val)" class="fa-solid fa-check text-[10px]"></i>
+                                        <span>星期{{ wk.label }}</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Multi Time Slots Selection -->
+                            <div>
+                                <label class="block font-bold mb-1.5 text-slate-700">選擇時間段 (可複選)</label>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-40 overflow-y-auto p-2.5 bg-slate-50 border rounded-xl">
+                                    <label v-for="slot in timeSlots" :key="slot.id" 
+                                           :class="batchForm.selectedSlots.includes(slot.id) ? 'border-purple-500 bg-purple-50/80 text-purple-700 font-bold shadow-xs' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'"
+                                           class="p-2 border rounded-lg text-xs cursor-pointer flex items-center space-x-2 transition">
+                                        <input type="checkbox" :value="slot.id" v-model="batchForm.selectedSlots" class="rounded text-purple-600 focus:ring-purple-500">
+                                        <span class="truncate font-mono">{{ slot.time }}</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block font-bold mb-1 text-slate-700">申請人姓名</label>
+                                    <input type="text" v-model="batchForm.applicant" required placeholder="例如：李主任" class="w-full px-3 py-2 border rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                                </div>
+                                <div>
+                                    <label class="block font-bold mb-1 text-slate-700">班級 / 部門</label>
+                                    <input type="text" v-model="batchForm.department" required placeholder="例如：籃球校隊" class="w-full px-3 py-2 border rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block font-bold mb-1 text-slate-700">用途說明</label>
+                                <textarea v-model="batchForm.purpose" required rows="2" placeholder="例如：學界比賽常規訓練" class="w-full px-3 py-2 border rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500"></textarea>
+                            </div>
+
+                            <!-- Live Calculation Preview -->
+                            <div class="p-3 rounded-xl bg-purple-50 border border-purple-200 text-xs space-y-1">
+                                <div class="font-bold text-purple-900 flex justify-between items-center">
+                                    <span><i class="fa-solid fa-calculator mr-1.5 text-purple-600"></i>預估預約結果：</span>
+                                    <span class="text-sm font-black text-purple-700">{{ batchCalculation.validCount }} 筆將成功建立</span>
+                                </div>
+                                <div v-if="batchCalculation.conflictCount > 0" class="text-rose-600 font-semibold text-[11px] flex items-center gap-1">
+                                    <i class="fa-solid fa-triangle-exclamation"></i>
+                                    <span>其中 {{ batchCalculation.conflictCount }} 筆時段已存在舊預約（系統將會自動跳過）</span>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center space-x-3 pt-2">
+                                <button type="submit" :disabled="batchCalculation.validCount === 0" 
+                                        :class="batchCalculation.validCount === 0 ? 'bg-slate-300 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700 shadow-md'"
+                                        class="px-6 py-2.5 text-white font-bold text-xs rounded-xl transition flex items-center space-x-1.5">
+                                    <i class="fa-solid fa-layer-group"></i>
+                                    <span>確認執行批量預約 ({{ batchCalculation.validCount }}筆)</span>
+                                </button>
+                            </div>
+                        </form>
+
+                        <!-- Mode 2: CSV Import Batch Booking -->
+                        <div v-else-if="batchMode === 'csv'" class="space-y-4 text-xs">
+                            <!-- CSV Control Header Bar -->
+                            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-wrap justify-between items-center gap-3">
+                                <div class="space-y-1">
+                                    <div class="font-bold text-slate-800 flex items-center gap-2">
+                                        <i class="fa-solid fa-file-csv text-purple-600 text-base"></i>
+                                        <span>上載 CSV 檔案進行批量預約</span>
+                                    </div>
+                                    <div class="text-[11px] text-slate-500">
+                                        欄位順序：<span class="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-700 font-bold">場地, 日期, 時間段, 申請人, 班級部門, 用途</span>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center space-x-2 flex-wrap gap-y-2">
+                                    <button @click="downloadBatchCSVTemplate" class="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-bold transition flex items-center gap-1">
+                                        <i class="fa-solid fa-file-arrow-down"></i>
+                                        <span>下載 CSV 預約範本</span>
+                                    </button>
+                                    <label class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold transition cursor-pointer flex items-center gap-1 shadow-xs">
+                                        <i class="fa-solid fa-file-arrow-up"></i>
+                                        <span>選擇 CSV 檔案</span>
+                                        <input type="file" accept=".csv" @change="uploadBatchCSV" class="hidden">
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- CSV Preview Results -->
+                            <div v-if="csvParsedBookings.length > 0" class="space-y-3">
+                                <div class="flex items-center justify-between bg-purple-50 p-3 rounded-xl border border-purple-200">
+                                    <div class="font-bold text-purple-900 flex items-center gap-2">
+                                        <i class="fa-solid fa-list-check text-purple-600"></i>
+                                        <span>檔案解析結果 ({{ csvFileName }})</span>
+                                    </div>
+                                    <div class="flex items-center space-x-3 text-xs">
+                                        <span class="text-emerald-700 font-bold"><i class="fa-solid fa-circle-check mr-1"></i>{{ csvBatchSummary.validCount }} 筆有效可匯入</span>
+                                        <span v-if="csvBatchSummary.invalidCount > 0" class="text-rose-600 font-bold"><i class="fa-solid fa-circle-xmark mr-1"></i>{{ csvBatchSummary.invalidCount }} 筆衝突/錯誤 (跳過)</span>
+                                    </div>
+                                </div>
+
+                                <div class="max-h-72 overflow-y-auto border border-slate-200 rounded-xl overflow-x-auto">
+                                    <table class="w-full text-left text-xs">
+                                        <thead class="bg-slate-100 text-slate-600 font-bold border-b border-slate-200 sticky top-0">
+                                            <tr>
+                                                <th class="p-2.5">狀態</th>
+                                                <th class="p-2.5">場地</th>
+                                                <th class="p-2.5">日期</th>
+                                                <th class="p-2.5">時間段</th>
+                                                <th class="p-2.5">申請人</th>
+                                                <th class="p-2.5">部門/班級</th>
+                                                <th class="p-2.5">用途</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-slate-100">
+                                            <tr v-for="(item, idx) in csvParsedBookings" :key="idx" :class="!item.valid ? 'bg-rose-50/50' : 'hover:bg-slate-50'">
+                                                <td class="p-2.5 whitespace-nowrap">
+                                                    <span v-if="item.valid" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 inline-flex items-center gap-1">
+                                                        <i class="fa-solid fa-check"></i>可新增
+                                                    </span>
+                                                    <span v-else class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 inline-flex items-center gap-1" :title="item.reason">
+                                                        <i class="fa-solid fa-xmark"></i>{{ item.reason }}
+                                                    </span>
+                                                </td>
+                                                <td class="p-2.5 font-bold">{{ item.roomName || item.rawRoom }}</td>
+                                                <td class="p-2.5 font-mono">{{ item.date }}</td>
+                                                <td class="p-2.5 font-mono">{{ item.slotTime || item.rawSlot }}</td>
+                                                <td class="p-2.5">{{ item.applicant }}</td>
+                                                <td class="p-2.5">{{ item.department }}</td>
+                                                <td class="p-2.5 text-slate-600 max-w-xs truncate">{{ item.purpose }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div class="flex justify-end pt-2">
+                                    <button @click="submitCSVBatchBooking" :disabled="csvBatchSummary.validCount === 0"
+                                            :class="csvBatchSummary.validCount === 0 ? 'bg-slate-300 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700 shadow-md'"
+                                            class="px-6 py-2.5 text-white font-bold text-xs rounded-xl transition flex items-center space-x-1.5">
+                                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                                        <span>確認匯入 {{ csvBatchSummary.validCount }} 筆預約</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Rooms Management -->
+                    <div v-if="adminSubTab === 'rooms'" class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs p-4 space-y-3">
+                        <div class="flex justify-between items-center pb-2 border-b flex-wrap gap-2">
+                            <div>
+                                <div class="font-bold text-xs text-slate-800"><i class="fa-solid fa-door-open text-indigo-600 mr-1.5"></i>活動室列表</div>
+                                <div class="text-[10px] text-slate-400 mt-0.5">CSV 欄位格式：編號, 名稱, 容納人數, 標籤顏色</div>
+                            </div>
+                            <div class="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                                <button @click="downloadRoomsCSV" class="px-2.5 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs font-bold transition">
+                                    <i class="fa-solid fa-file-arrow-down mr-1"></i>下載 CSV
+                                </button>
+                                <label class="px-2.5 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs font-bold transition cursor-pointer">
+                                    <i class="fa-solid fa-file-arrow-up mr-1"></i>上載 CSV
+                                    <input type="file" accept=".csv" @change="uploadRoomsCSV" class="hidden">
+                                </label>
+                                <button @click="openRoomModal()" class="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition">
+                                    <i class="fa-solid fa-plus mr-1"></i>新增活動室
+                                </button>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-slate-50 text-slate-500 font-bold border-b">
+                                    <tr>
+                                        <th class="p-2.5">編號</th>
+                                        <th class="p-2.5">顏色標記</th>
+                                        <th class="p-2.5">名稱</th>
+                                        <th class="p-2.5">容納人數</th>
+                                        <th class="p-2.5 text-center">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    <tr v-for="rm in rooms" :key="rm.id">
+                                        <td class="p-2.5 font-mono text-slate-500">{{ rm.id }}</td>
+                                        <td class="p-2.5">
+                                            <span class="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold border" :style="getRoomBadgeStyle(rm.id)">
+                                                <span class="w-2.5 h-2.5 rounded-full inline-block" :style="{ backgroundColor: rm.color || '#6366f1' }"></span>
+                                                <span>{{ rm.color || '#6366f1' }}</span>
+                                            </span>
+                                        </td>
+                                        <td class="p-2.5 font-bold">{{ rm.name }}</td>
+                                        <td class="p-2.5 text-slate-600">{{ rm.capacity }} 人</td>
+                                        <td class="p-2.5 text-center space-x-1">
+                                            <button @click="openRoomModal(rm)" class="px-2 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded text-[10px] font-bold">編輯</button>
+                                            <button @click="deleteRoom(rm.id)" class="px-2 py-1 bg-rose-100 text-rose-700 hover:bg-rose-200 rounded text-[10px] font-bold">刪除</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 3. Time Slots Management -->
+                    <div v-if="adminSubTab === 'slots'" class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs p-4 space-y-3">
+                        <div class="flex justify-between items-center pb-2 border-b flex-wrap gap-2">
+                            <div>
+                                <div class="font-bold text-xs text-slate-800"><i class="fa-solid fa-clock text-indigo-600 mr-1.5"></i>時間段列表</div>
+                                <div class="text-[10px] text-slate-400 mt-0.5">CSV 欄位格式：編號, 時間段</div>
+                            </div>
+                            <div class="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                                <button @click="downloadSlotsCSV" class="px-2.5 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs font-bold transition">
+                                    <i class="fa-solid fa-file-arrow-down mr-1"></i>下載 CSV
+                                </button>
+                                <label class="px-2.5 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs font-bold transition cursor-pointer">
+                                    <i class="fa-solid fa-file-arrow-up mr-1"></i>上載 CSV
+                                    <input type="file" accept=".csv" @change="uploadSlotsCSV" class="hidden">
+                                </label>
+                                <button @click="openSlotModal()" class="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition">
+                                    <i class="fa-solid fa-plus mr-1"></i>新增時間段
+                                </button>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-slate-50 text-slate-500 font-bold border-b">
+                                    <tr>
+                                        <th class="p-2.5">編號</th>
+                                        <th class="p-2.5">時間段範圍</th>
+                                        <th class="p-2.5 text-center">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    <tr v-for="s in timeSlots" :key="s.id">
+                                        <td class="p-2.5 font-mono text-slate-500">{{ s.id }}</td>
+                                        <td class="p-2.5 font-bold">{{ s.time }}</td>
+                                        <td class="p-2.5 text-center space-x-1">
+                                            <button @click="openSlotModal(s)" class="px-2 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded text-[10px] font-bold">編輯</button>
+                                            <button @click="deleteSlot(s.id)" class="px-2 py-1 bg-rose-100 text-rose-700 hover:bg-rose-200 rounded text-[10px] font-bold">刪除</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 4. System Settings & Admin Password -->
+                    <div v-if="adminSubTab === 'settings'" class="space-y-4">
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
+                            <div class="font-bold text-slate-800 flex items-center space-x-1">
+                                <i class="fa-solid fa-key text-indigo-600"></i>
+                                <span>修改管理員密碼</span>
+                            </div>
+                            <div class="flex gap-2 max-w-sm">
+                                <input type="password" v-model="newAdminPassword" placeholder="輸入新密碼" class="flex-1 px-3 py-1.5 border rounded-lg">
+                                <button @click="updateAdminPassword" class="px-3 py-1.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700">更新密碼</button>
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 space-y-2 text-xs">
+                            <div class="font-bold text-slate-800 flex items-center space-x-1">
+                                <i class="fa-solid fa-link text-indigo-600"></i>
+                                <span>Google Apps Script Web App URL 設定</span>
+                            </div>
+                            <input type="url" v-model="googleScriptUrl" placeholder="https://script.google.com/macros/s/.../exec" class="w-full px-3 py-1.5 border rounded-lg">
+                            <button @click="saveGoogleScriptUrl" class="px-3 py-1.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700">儲存 URL</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Booking Modal -->
+        <div v-if="showBookingModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 overflow-y-auto">
+            <div class="bg-white rounded-xl shadow-xl border w-full max-w-md p-5 text-xs space-y-4 my-8">
+                <!-- Modal Header & Tab Switcher -->
+                <div class="flex justify-between items-center font-bold text-sm text-slate-800 border-b pb-2">
+                    <div class="flex items-center space-x-2">
+                        <button type="button" @click="bookingModalTab = 'single'" :class="bookingModalTab === 'single' ? 'text-indigo-600 border-b-2 border-indigo-600 pb-1' : 'text-slate-400 hover:text-slate-600'" class="transition">
+                            <i class="fa-solid fa-calendar-plus mr-1"></i>單筆預約
+                        </button>
+                        <button type="button" @click="bookingModalTab = 'batch'" :class="bookingModalTab === 'batch' ? 'text-purple-600 border-b-2 border-purple-600 pb-1' : 'text-slate-400 hover:text-slate-600'" class="transition">
+                            <i class="fa-solid fa-layer-group mr-1"></i>批量 / 週期預約
+                        </button>
+                    </div>
+                    <button @click="showBookingModal = false"><i class="fa-solid fa-xmark text-slate-400 hover:text-slate-600"></i></button>
+                </div>
+
+                <!-- 1. Single Booking Form -->
+                <form v-if="bookingModalTab === 'single'" @submit.prevent="submitBookingForm" class="space-y-3">
+                    <div>
+                        <label class="block font-bold mb-1 text-slate-700">選擇活動室</label>
+                        <select v-model="bookingForm.roomId" required class="w-full px-3 py-2 border rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option v-for="rm in rooms" :key="rm.id" :value="rm.id">{{ rm.name }} ({{ rm.capacity }}人)</option>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block font-bold mb-1 text-slate-700">預約日期</label>
+                            <input type="date" v-model="bookingForm.date" required class="w-full px-3 py-2 border rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block font-bold mb-1 text-slate-700">時間段</label>
+                            <select v-model="bookingForm.timeSlotId" required class="w-full px-3 py-2 border rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                <option v-for="slot in timeSlots" :key="slot.id" :value="slot.id" :disabled="isSlotOccupied(bookingForm.roomId, bookingForm.date, slot.id)">
+                                    {{ slot.time }} {{ isSlotOccupied(bookingForm.roomId, bookingForm.date, slot.id) ? '(已被預約)' : '' }}
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block font-bold mb-1 text-slate-700">申請人姓名</label>
+                            <input type="text" v-model="bookingForm.applicant" required placeholder="例如：張老師" class="w-full px-3 py-2 border rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block font-bold mb-1 text-slate-700">班級 / 部門</label>
+                            <input type="text" v-model="bookingForm.department" required placeholder="例如：中三甲班" class="w-full px-3 py-2 border rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block font-bold mb-1 text-slate-700">用途說明</label>
+                        <textarea v-model="bookingForm.purpose" required rows="2" placeholder="例如：班會活動訓練" class="w-full px-3 py-2 border rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                    </div>
+                    <div class="flex justify-end space-x-2 pt-2 border-t">
+                        <button type="button" @click="showBookingModal = false" class="px-4 py-2 border rounded-lg font-bold hover:bg-slate-50 text-slate-600">取消</button>
+                        <button type="submit" class="px-5 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition">確認預約</button>
+                    </div>
+                </form>
+
+                <!-- 2. Batch Booking Form -->
+                <form v-else @submit.prevent="submitBatchBooking" class="space-y-3">
+                    <div>
+                        <label class="block font-bold mb-1 text-slate-700">選擇活動室</label>
+                        <select v-model="batchForm.roomId" required class="w-full px-3 py-2 border rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                            <option v-for="rm in rooms" :key="rm.id" :value="rm.id">{{ rm.name }} ({{ rm.capacity }}人)</option>
+                        </select>
+                    </div>
+
+                    <!-- Date Range -->
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block font-bold mb-1 text-slate-700">開始日期</label>
+                            <input type="date" v-model="batchForm.startDate" required class="w-full px-3 py-1.5 border rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        </div>
+                        <div>
+                            <label class="block font-bold mb-1 text-slate-700">結束日期</label>
+                            <input type="date" v-model="batchForm.endDate" required class="w-full px-3 py-1.5 border rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        </div>
+                    </div>
+
+                    <!-- Weekdays Selection -->
+                    <div>
+                        <label class="block font-bold mb-1 text-slate-700">重複星期</label>
+                        <div class="flex flex-wrap gap-1.5">
+                            <label v-for="wk in weekdayOptions" :key="wk.val" 
+                                   :class="batchForm.weekdays.includes(wk.val) ? 'bg-purple-600 text-white font-bold' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                                   class="px-2.5 py-1 rounded-lg text-[11px] cursor-pointer transition select-none flex items-center gap-1">
+                                <input type="checkbox" :value="wk.val" v-model="batchForm.weekdays" class="hidden">
+                                <span>星期{{ wk.label }}</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Multi Time Slots Selection -->
+                    <div>
+                        <label class="block font-bold mb-1 text-slate-700">選擇時間段 (可複選)</label>
+                        <div class="grid grid-cols-2 gap-1.5 max-h-32 overflow-y-auto p-2 bg-slate-50 border rounded-lg">
+                            <label v-for="slot in timeSlots" :key="slot.id" 
+                                   :class="batchForm.selectedSlots.includes(slot.id) ? 'border-purple-500 bg-purple-50 text-purple-700 font-bold' : 'border-slate-200 bg-white text-slate-600'"
+                                   class="p-1.5 border rounded-lg text-[10px] cursor-pointer flex items-center space-x-1.5 transition">
+                                <input type="checkbox" :value="slot.id" v-model="batchForm.selectedSlots" class="rounded text-purple-600 focus:ring-purple-500">
+                                <span class="truncate">{{ slot.time }}</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block font-bold mb-1 text-slate-700">申請人姓名</label>
+                            <input type="text" v-model="batchForm.applicant" required placeholder="例如：李主任" class="w-full px-3 py-1.5 border rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        </div>
+                        <div>
+                            <label class="block font-bold mb-1 text-slate-700">班級 / 部門</label>
+                            <input type="text" v-model="batchForm.department" required placeholder="例如：校隊代表" class="w-full px-3 py-1.5 border rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block font-bold mb-1 text-slate-700">用途說明</label>
+                        <textarea v-model="batchForm.purpose" required rows="2" placeholder="例如：學界比賽常規訓練" class="w-full px-3 py-1.5 border rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500"></textarea>
+                    </div>
+
+                    <!-- Live Calculation Preview -->
+                    <div class="p-2.5 rounded-lg bg-purple-50 border border-purple-200 text-[11px] space-y-1">
+                        <div class="font-bold text-purple-800 flex justify-between items-center">
+                            <span><i class="fa-solid fa-calculator mr-1"></i>批量預估結果：</span>
+                            <span class="text-xs font-black">{{ batchCalculation.validCount }} 筆可成功新增</span>
+                        </div>
+                        <div v-if="batchCalculation.conflictCount > 0" class="text-rose-600 font-semibold text-[10px]">
+                            <i class="fa-solid fa-triangle-exclamation mr-1"></i>另有 {{ batchCalculation.conflictCount }} 筆時段已被預約（將自動跳過）
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end space-x-2 pt-2 border-t">
+                        <button type="button" @click="showBookingModal = false" class="px-4 py-2 border rounded-lg font-bold hover:bg-slate-50 text-slate-600">取消</button>
+                        <button type="submit" :disabled="batchCalculation.validCount === 0" 
+                                :class="batchCalculation.validCount === 0 ? 'bg-slate-300 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'"
+                                class="px-5 py-2 text-white font-bold rounded-lg transition">
+                            確認批量預約 ({{ batchCalculation.validCount }}筆)
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Room Modal -->
+        <div v-if="showRoomModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40">
+            <div class="bg-white rounded-xl shadow-xl border w-full max-w-xs p-4 text-xs space-y-3">
+                <div class="flex justify-between items-center font-bold text-sm text-slate-800 border-b pb-2">
+                    <span>{{ isEditingRoom ? '編輯活動室' : '新增活動室' }}</span>
+                    <button @click="showRoomModal = false"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <form @submit.prevent="saveRoom" class="space-y-2.5">
+                    <div>
+                        <label class="block font-bold mb-1">場地名稱</label>
+                        <input type="text" v-model="roomForm.name" required placeholder="如：多用途活動室" class="w-full px-2.5 py-1.5 border rounded-lg bg-slate-50">
+                    </div>
+                    <div>
+                        <label class="block font-bold mb-1">容納人數</label>
+                        <input type="number" v-model.number="roomForm.capacity" required placeholder="如：30" class="w-full px-2.5 py-1.5 border rounded-lg bg-slate-50">
+                    </div>
+                    <div>
+                        <label class="block font-bold mb-1">代表顏色標記</label>
+                        <div class="flex items-center space-x-2">
+                            <input type="color" v-model="roomForm.color" class="w-8 h-8 rounded border border-slate-200 p-0.5 cursor-pointer">
+                            <span class="font-mono text-slate-500 text-xs">{{ roomForm.color }}</span>
+                        </div>
+                        <div class="flex items-center space-x-1.5 mt-2">
+                            <button type="button" v-for="c in presetColors" :key="c" @click="roomForm.color = c" 
+                                    class="w-5 h-5 rounded-full border border-slate-300 transition hover:scale-110" 
+                                    :style="{ backgroundColor: c }" :title="c"></button>
+                        </div>
+                    </div>
+                    <div class="flex justify-end space-x-2 pt-2 border-t">
+                        <button type="button" @click="showRoomModal = false" class="px-3 py-1.5 border rounded-lg font-bold">取消</button>
+                        <button type="submit" class="px-4 py-1.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700">儲存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Time Slot Modal -->
+        <div v-if="showSlotModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40">
+            <div class="bg-white rounded-xl shadow-xl border w-full max-w-xs p-4 text-xs space-y-3">
+                <div class="flex justify-between items-center font-bold text-sm text-slate-800 border-b pb-2">
+                    <span>{{ isEditingSlot ? '編輯時間段' : '新增時間段' }}</span>
+                    <button @click="showSlotModal = false"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <form @submit.prevent="saveSlot" class="space-y-2.5">
+                    <div>
+                        <label class="block font-bold mb-1">時間段（例如 08:15 - 09:15）</label>
+                        <input type="text" v-model="slotForm.time" required placeholder="如：08:15 - 09:15" class="w-full px-2.5 py-1.5 border rounded-lg bg-slate-50">
+                    </div>
+                    <div class="flex justify-end space-x-2 pt-2 border-t">
+                        <button type="button" @click="showSlotModal = false" class="px-3 py-1.5 border rounded-lg font-bold">取消</button>
+                        <button type="submit" class="px-4 py-1.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700">儲存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Detail Modal -->
+        <div v-if="selectedBookingDetail" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40">
+            <div class="bg-white rounded-xl shadow-xl border w-full max-w-xs p-4 text-xs space-y-2">
+                <div class="font-bold text-sm text-slate-800 border-b pb-1.5 flex items-center justify-between">
+                    <span>預約詳情</span>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold" :style="getRoomBadgeStyle(selectedBookingDetail.roomId)">
+                        {{ getRoomName(selectedBookingDetail.roomId) }}
+                    </span>
+                </div>
+                <div><strong>場地：</strong>{{ getRoomName(selectedBookingDetail.roomId) }}</div>
+                <div><strong>時間：</strong>{{ selectedBookingDetail.date }} ({{ getSlotName(selectedBookingDetail.timeSlotId) }})</div>
+                <div><strong>申請人：</strong>{{ selectedBookingDetail.applicant }} ({{ selectedBookingDetail.department }})</div>
+                <div><strong>用途：</strong>{{ selectedBookingDetail.purpose }}</div>
+                <div class="flex justify-end pt-2">
+                    <button @click="selectedBookingDetail = null" class="px-3 py-1 bg-slate-800 text-white font-bold rounded-lg">關閉</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                const currentTab = ref('schedule');
+                const adminSubTab = ref('bookings');
+                const toast = ref({ show: false, message: '', type: 'success' });
+                const getTodayStr = () => new Date().toISOString().split('T')[0];
+                const selectedDate = ref(getTodayStr());
+
+                // Booking Modal Tab & Form State
+                const bookingModalTab = ref('single'); // 'single' or 'batch'
+                const showBookingModal = ref(false);
+
+                // Admin Batch Mode & CSV State
+                const batchMode = ref('form'); // 'form' or 'csv'
+                const csvParsedBookings = ref([]);
+                const csvFileName = ref('');
+
+                const bookingForm = ref({ roomId: '', date: getTodayStr(), timeSlotId: 'S1', applicant: '', department: '', purpose: '' });
+
+                const batchForm = ref({
+                    roomId: '',
+                    startDate: getTodayStr(),
+                    endDate: getTodayStr(),
+                    weekdays: [1, 2, 3, 4, 5], // 1=Mon, 2=Tue, ..., 0=Sun
+                    selectedSlots: [],
+                    applicant: '',
+                    department: '',
+                    purpose: ''
+                });
+
+                const weekdayOptions = [
+                    { val: 1, label: '一' },
+                    { val: 2, label: '二' },
+                    { val: 3, label: '三' },
+                    { val: 4, label: '四' },
+                    { val: 5, label: '五' },
+                    { val: 6, label: '六' },
+                    { val: 0, label: '日' }
+                ];
+
+                // Batch Booking Preview Calculation
+                const batchCalculation = computed(() => {
+                    if (!batchForm.value.roomId || !batchForm.value.startDate || !batchForm.value.endDate || batchForm.value.selectedSlots.length === 0 || batchForm.value.weekdays.length === 0) {
+                        return { validCount: 0, conflictCount: 0, items: [] };
+                    }
+
+                    const items = [];
+                    let validCount = 0;
+                    let conflictCount = 0;
+
+                    const start = new Date(batchForm.value.startDate);
+                    const end = new Date(batchForm.value.endDate);
+
+                    if (start > end) return { validCount: 0, conflictCount: 0, items: [] };
+
+                    const current = new Date(start);
+                    while (current <= end) {
+                        const dayOfWeek = current.getDay(); // 0-6
+                        if (batchForm.value.weekdays.includes(dayOfWeek)) {
+                            const dateStr = current.toISOString().split('T')[0];
+                            batchForm.value.selectedSlots.forEach(slotId => {
+                                const occupied = isSlotOccupied(batchForm.value.roomId, dateStr, slotId);
+                                if (occupied) {
+                                    conflictCount++;
+                                } else {
+                                    validCount++;
+                                    items.push({
+                                        roomId: batchForm.value.roomId,
+                                        date: dateStr,
+                                        timeSlotId: slotId,
+                                        applicant: batchForm.value.applicant,
+                                        department: batchForm.value.department,
+                                        purpose: batchForm.value.purpose
+                                    });
+                                }
+                            });
+                        }
+                        current.setDate(current.getDate() + 1);
+                    }
+
+                    return { validCount, conflictCount, items };
+                });
+
+                const csvBatchSummary = computed(() => {
+                    const validCount = csvParsedBookings.value.filter(x => x.valid).length;
+                    const invalidCount = csvParsedBookings.value.length - validCount;
+                    return { validCount, invalidCount };
+                });
+
+                const downloadBatchCSVTemplate = () => {
+                    let csvContent = "\ufeff場地,日期,時間段,申請人,班級或部門,用途\n";
+                    csvContent += "大禮堂,2026-09-01,08:15 - 09:15,張老師,中一甲班,班會體驗活動\n";
+                    csvContent += "STEM 教室,2026-09-01,S2,李主任,籃球隊,常規訓練\n";
+                    csvContent += "R4,2026-09-02,13:45 - 14:45,陳老師,舞蹈社,舞蹈練習\n";
+
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement("a");
+                    link.href = URL.createObjectURL(blob);
+                    link.setAttribute("download", `batch_booking_template.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    showToast('已下載 CSV 預約範本檔');
+                };
+
+                const uploadBatchCSV = (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    csvFileName.value = file.name;
+
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const text = e.target.result;
+                            const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+                            if (lines.length <= 1) {
+                                showToast('CSV 檔案為空或無有效資料', 'error');
+                                return;
+                            }
+
+                            const parsed = [];
+                            const startIdx = (lines[0].includes('場地') || lines[0].toLowerCase().includes('room')) ? 1 : 0;
+                            const internalOccupiedMap = new Set();
+
+                            for (let i = startIdx; i < lines.length; i++) {
+                                const cols = lines[i].split(',').map(c => c.replace(/^"|"$/g, '').trim());
+                                if (cols.length < 3) continue;
+
+                                const rawRoom = cols[0] || '';
+                                const rawDate = cols[1] || '';
+                                const rawSlot = cols[2] || '';
+                                const applicant = cols[3] || '未填寫';
+                                const department = cols[4] || '未填寫';
+                                const purpose = cols[5] || '無';
+
+                                // Find matching room by ID or Name
+                                const matchedRoom = rooms.value.find(r => 
+                                    r.id.toLowerCase() === rawRoom.toLowerCase() || 
+                                    r.name.toLowerCase() === rawRoom.toLowerCase()
+                                );
+
+                                // Find matching time slot by ID or Time string
+                                const matchedSlot = timeSlots.value.find(s => 
+                                    s.id.toLowerCase() === rawSlot.toLowerCase() || 
+                                    s.time.toLowerCase() === rawSlot.toLowerCase() ||
+                                    s.time.replace(/\s+/g, '') === rawSlot.replace(/\s+/g, '')
+                                );
+
+                                // Validate date format
+                                const dateValid = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) && !isNaN(new Date(rawDate).getTime());
+
+                                let valid = true;
+                                let reason = '';
+
+                                if (!matchedRoom) {
+                                    valid = false;
+                                    reason = '找不到對應場地';
+                                } else if (!matchedSlot) {
+                                    valid = false;
+                                    reason = '找不到對應時間段';
+                                } else if (!dateValid) {
+                                    valid = false;
+                                    reason = '日期格式需為 YYYY-MM-DD';
+                                } else {
+                                    const key = `${matchedRoom.id}_${rawDate}_${matchedSlot.id}`;
+                                    const alreadyBooked = isSlotOccupied(matchedRoom.id, rawDate, matchedSlot.id);
+                                    if (alreadyBooked) {
+                                        valid = false;
+                                        reason = '時段已被舊預約占用';
+                                    } else if (internalOccupiedMap.has(key)) {
+                                        valid = false;
+                                        reason = '檔案內重複時段';
+                                    } else {
+                                        internalOccupiedMap.add(key);
+                                    }
+                                }
+
+                                parsed.push({
+                                    rawRoom, rawSlot,
+                                    roomId: matchedRoom ? matchedRoom.id : '',
+                                    roomName: matchedRoom ? matchedRoom.name : rawRoom,
+                                    date: rawDate,
+                                    timeSlotId: matchedSlot ? matchedSlot.id : '',
+                                    slotTime: matchedSlot ? matchedSlot.time : rawSlot,
+                                    applicant, department, purpose,
+                                    valid, reason
+                                });
+                            }
+
+                            csvParsedBookings.value = parsed;
+                            showToast(`解析完成，共有 ${parsed.length} 筆預約資料`);
+                        } catch (err) {
+                            showToast('解析 CSV 失敗，請檢查檔案格式', 'error');
+                        }
+                        event.target.value = '';
+                    };
+                    reader.readAsText(file);
+                };
+
+                const submitCSVBatchBooking = () => {
+                    const validItems = csvParsedBookings.value.filter(x => x.valid);
+                    if (validItems.length === 0) {
+                        showToast('沒有可匯入的有效預約', 'error');
+                        return;
+                    }
+
+                    const timestamp = Date.now().toString().slice(-5);
+                    validItems.forEach((item, index) => {
+                        bookings.value.push({
+                            id: 'BK' + (parseInt(timestamp) + index),
+                            roomId: item.roomId,
+                            date: item.date,
+                            timeSlotId: item.timeSlotId,
+                            applicant: item.applicant,
+                            department: item.department,
+                            purpose: item.purpose
+                        });
+                    });
+
+                    saveBookings();
+                    csvParsedBookings.value = [];
+                    csvFileName.value = '';
+                    showToast(`成功匯入 ${validItems.length} 筆 CSV 預約！`);
+                    syncWithGoogleSheets(false);
+                };
+
+                // Color presets for quick selection
+                const presetColors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#8b5cf6', '#f97316', '#14b8a6'];
+
+                // View Modes & Filtering
+                const viewMode = ref('day'); // 'day', 'week', 'month'
+                const selectedRoomFilter = ref('ALL');
+
+                // Admin Booking Date Filter
+                const adminDateFilterType = ref('ALL'); // 'ALL', 'TODAY', 'UPCOMING', 'CUSTOM'
+                const adminFilterDate = ref(getTodayStr());
+
+                const filteredAdminBookings = computed(() => {
+                    return bookings.value.filter(b => {
+                        if (adminDateFilterType.value === 'TODAY') {
+                            return b.date === getTodayStr();
+                        } else if (adminDateFilterType.value === 'UPCOMING') {
+                            return b.date >= getTodayStr();
+                        } else if (adminDateFilterType.value === 'CUSTOM') {
+                            return b.date === adminFilterDate.value;
+                        }
+                        return true;
+                    }).sort((a, b) => {
+                        if (a.date !== b.date) return b.date.localeCompare(a.date);
+                        return a.timeSlotId.localeCompare(b.timeSlotId);
+                    });
+                });
+
+                const timeSlots = ref([
+                    { id: 'S1', time: '08:15 - 09:15' },
+                    { id: 'S2', time: '09:15 - 10:15' },
+                    { id: 'S3', time: '10:30 - 11:30' },
+                    { id: 'S4', time: '11:30 - 12:30' },
+                    { id: 'S5', time: '13:45 - 14:45' },
+                    { id: 'S6', time: '16:00 - 18:00' },
+                ]);
+
+                const rooms = ref([
+                    { id: 'R1', name: '大禮堂', capacity: 500, color: '#6366f1' },
+                    { id: 'R2', name: '演講廳', capacity: 120, color: '#10b981' },
+                    { id: 'R3', name: 'STEM 教室', capacity: 40, color: '#f59e0b' },
+                    { id: 'R4', name: '舞蹈室', capacity: 30, color: '#ec4899' },
+                ]);
+
+                const bookings = ref([]);
+                const adminPassword = ref('admin123');
+                const inputAdminPassword = ref('');
+                const newAdminPassword = ref('');
+                const isAdminLoggedIn = ref(false);
+                const googleScriptUrl = ref('');
+                const selectedBookingDetail = ref(null);
+
+                // Room & Slot Modals
+                const showRoomModal = ref(false);
+                const isEditingRoom = ref(false);
+                const roomForm = ref({ id: '', name: '', capacity: 30, color: '#6366f1' });
+
+                const showSlotModal = ref(false);
+                const isEditingSlot = ref(false);
+                const slotForm = ref({ id: '', time: '' });
+
+                const showToast = (msg, type = 'success') => {
+                    toast.value = { show: true, message: msg, type };
+                    setTimeout(() => { toast.value.show = false; }, 2500);
+                };
+
+                const getRoomName = (id) => (rooms.value.find(r => r.id === id) || {}).name || id;
+                const getRoomColor = (id) => (rooms.value.find(r => r.id === id) || {}).color || '#6366f1';
+                
+                const getRoomStyle = (id) => {
+                    const color = getRoomColor(id);
+                    return {
+                        backgroundColor: color + '15',
+                        borderColor: color + '40',
+                        borderLeftColor: color,
+                    };
+                };
+
+                const getRoomBadgeStyle = (id) => {
+                    const color = getRoomColor(id);
+                    return {
+                        backgroundColor: color + '1A',
+                        borderColor: color + '40',
+                        color: color
+                    };
+                };
+
+                const getSlotName = (id) => (timeSlots.value.find(s => s.id === id) || {}).time || id;
+                const getBookingForSlot = (roomId, date, slotId) => bookings.value.find(b => b.roomId === roomId && b.date === date && b.timeSlotId === slotId);
+                const isSlotOccupied = (roomId, date, slotId) => !!getBookingForSlot(roomId, date, slotId);
+
+                const navigatePeriod = (dir) => {
+                    const d = new Date(selectedDate.value);
+                    if (viewMode.value === 'day') {
+                        d.setDate(d.getDate() + dir);
+                    } else if (viewMode.value === 'week') {
+                        d.setDate(d.getDate() + (dir * 7));
+                    } else if (viewMode.value === 'month') {
+                        d.setMonth(d.getMonth() + dir);
+                    }
+                    selectedDate.value = d.toISOString().split('T')[0];
+                };
+
+                const changeDate = (days) => {
+                    const d = new Date(selectedDate.value);
+                    d.setDate(d.getDate() + days);
+                    selectedDate.value = d.toISOString().split('T')[0];
+                };
+
+                // Week days array computation (Mon - Sun)
+                const weekDays = computed(() => {
+                    const curr = new Date(selectedDate.value);
+                    const dayOfWeek = curr.getDay();
+                    const diffToMon = (dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
+                    const mon = new Date(curr);
+                    mon.setDate(curr.getDate() + diffToMon);
+
+                    const days = [];
+                    const weekNames = ['一', '二', '三', '四', '五', '六', '日'];
+                    for (let i = 0; i < 7; i++) {
+                        const d = new Date(mon);
+                        d.setDate(mon.getDate() + i);
+                        const dateStr = d.toISOString().split('T')[0];
+                        days.push({
+                            date: dateStr,
+                            dayName: weekNames[i],
+                            shortDate: `${d.getMonth() + 1}/${d.getDate()}`,
+                            isToday: dateStr === getTodayStr()
+                        });
+                    }
+                    return days;
+                });
+
+                const weekRangeText = computed(() => {
+                    if (weekDays.value.length === 0) return '';
+                    return `${weekDays.value[0].date} ~ ${weekDays.value[6].date}`;
+                });
+
+                // Month calendar computation
+                const monthCalendarDays = computed(() => {
+                    const curr = new Date(selectedDate.value);
+                    const year = curr.getFullYear();
+                    const month = curr.getMonth();
+
+                    const firstDay = new Date(year, month, 1);
+                    const lastDay = new Date(year, month + 1, 0);
+
+                    let startDayOfWeek = firstDay.getDay() - 1;
+                    if (startDayOfWeek === -1) startDayOfWeek = 6;
+
+                    const days = [];
+                    const prevMonthLastDay = new Date(year, month, 0).getDate();
+
+                    for (let i = startDayOfWeek - 1; i >= 0; i--) {
+                        const pDate = new Date(year, month - 1, prevMonthLastDay - i);
+                        days.push({
+                            date: pDate.toISOString().split('T')[0],
+                            dayNum: pDate.getDate(),
+                            isCurrentMonth: false,
+                            isToday: pDate.toISOString().split('T')[0] === getTodayStr()
+                        });
+                    }
+
+                    for (let i = 1; i <= lastDay.getDate(); i++) {
+                        const cDate = new Date(year, month, i);
+                        const dateStr = cDate.toISOString().split('T')[0];
+                        days.push({
+                            date: dateStr,
+                            dayNum: i,
+                            isCurrentMonth: true,
+                            isToday: dateStr === getTodayStr()
+                        });
+                    }
+
+                    const totalDays = days.length;
+                    const remaining = (7 - (totalDays % 7)) % 7;
+                    for (let i = 1; i <= remaining; i++) {
+                        const nDate = new Date(year, month + 1, i);
+                        days.push({
+                            date: nDate.toISOString().split('T')[0],
+                            dayNum: i,
+                            isCurrentMonth: false,
+                            isToday: nDate.toISOString().split('T')[0] === getTodayStr()
+                        });
+                    }
+                    return days;
+                });
+
+                const currentMonthLabel = computed(() => {
+                    const d = new Date(selectedDate.value);
+                    return `${d.getFullYear()} 年 ${d.getMonth() + 1} 月`;
+                });
+
+                const displayedRooms = computed(() => {
+                    if (selectedRoomFilter.value === 'ALL') return rooms.value;
+                    return rooms.value.filter(r => r.id === selectedRoomFilter.value);
+                });
+
+                const getBookingsForDateAndSlot = (date, slotId, roomFilter = 'ALL') => {
+                    return bookings.value.filter(b => {
+                        const matchDateSlot = b.date === date && b.timeSlotId === slotId;
+                        if (!matchDateSlot) return false;
+                        if (roomFilter !== 'ALL') return b.roomId === roomFilter;
+                        return true;
+                    });
+                };
+
+                const getBookingsForDate = (date, roomFilter = 'ALL') => {
+                    return bookings.value.filter(b => {
+                        if (b.date !== date) return false;
+                        if (roomFilter !== 'ALL') return b.roomId === roomFilter;
+                        return true;
+                    });
+                };
+
+                const autoAssignRoomColors = () => {
+                    rooms.value.forEach((r, idx) => {
+                        if (!r.color) {
+                            r.color = presetColors[idx % presetColors.length];
+                        }
+                    });
+                };
+
+                const openBookingModal = (tab = 'single', roomId = null, date = null, timeSlotId = null) => {
+                    bookingModalTab.value = tab;
+                    const targetRoom = roomId || (rooms.value[0] ? rooms.value[0].id : '');
+                    const targetDate = date || selectedDate.value;
+                    let targetSlot = timeSlotId || (timeSlots.value[0] ? timeSlots.value[0].id : '');
+                    
+                    if (isSlotOccupied(targetRoom, targetDate, targetSlot)) {
+                        const freeSlot = timeSlots.value.find(s => !isSlotOccupied(targetRoom, targetDate, s.id));
+                        if (freeSlot) targetSlot = freeSlot.id;
+                    }
+
+                    bookingForm.value = {
+                        roomId: targetRoom,
+                        date: targetDate,
+                        timeSlotId: targetSlot,
+                        applicant: '', department: '', purpose: ''
+                    };
+
+                    const nextWeek = new Date();
+                    nextWeek.setDate(nextWeek.getDate() + 14);
+
+                    batchForm.value = {
+                        roomId: targetRoom,
+                        startDate: targetDate,
+                        endDate: nextWeek.toISOString().split('T')[0],
+                        weekdays: [1, 2, 3, 4, 5],
+                        selectedSlots: timeSlots.value.length > 0 ? [timeSlots.value[0].id] : [],
+                        applicant: '',
+                        department: '',
+                        purpose: ''
+                    };
+
+                    showBookingModal.value = true;
+                };
+
+                const submitBookingForm = () => {
+                    if (isSlotOccupied(bookingForm.value.roomId, bookingForm.value.date, bookingForm.value.timeSlotId)) {
+                        showToast('該時段已被預約，請選擇其他時段！', 'error');
+                        return;
+                    }
+                    bookings.value.push({
+                        id: 'BK' + Date.now().toString().slice(-5),
+                        ...bookingForm.value
+                    });
+                    saveBookings();
+                    showBookingModal.value = false;
+                    showToast('預約成功！');
+                    syncWithGoogleSheets(false);
+                };
+
+                const submitBatchBooking = () => {
+                    const { items, validCount, conflictCount } = batchCalculation.value;
+                    if (validCount === 0) {
+                        showToast('無可預約的有效時段', 'error');
+                        return;
+                    }
+
+                    const timestamp = Date.now().toString().slice(-5);
+                    items.forEach((item, index) => {
+                        bookings.value.push({
+                            id: 'BK' + (parseInt(timestamp) + index),
+                            roomId: item.roomId,
+                            date: item.date,
+                            timeSlotId: item.timeSlotId,
+                            applicant: batchForm.value.applicant,
+                            department: batchForm.value.department,
+                            purpose: batchForm.value.purpose
+                        });
+                    });
+
+                    saveBookings();
+                    showBookingModal.value = false;
+
+                    let msg = `已成功新增 ${validCount} 筆批量預約！`;
+                    if (conflictCount > 0) {
+                        msg += ` (自動跳過 ${conflictCount} 筆衝突時段)`;
+                    }
+                    showToast(msg);
+                    syncWithGoogleSheets(false);
+                };
+
+                const verifyAdminPassword = () => {
+                    if (inputAdminPassword.value === adminPassword.value) {
+                        isAdminLoggedIn.value = true;
+                        inputAdminPassword.value = '';
+                        showToast('已登入管理員');
+                    } else {
+                        showToast('密碼錯誤', 'error');
+                    }
+                };
+
+                const updateAdminPassword = () => {
+                    if (!newAdminPassword.value.trim()) {
+                        showToast('請輸入有效密碼', 'error');
+                        return;
+                    }
+                    adminPassword.value = newAdminPassword.value.trim();
+                    localStorage.setItem('simple_admin_pw', adminPassword.value);
+                    newAdminPassword.value = '';
+                    showToast('管理員密碼已更新');
+                };
+
+                // Room Management
+                const openRoomModal = (room = null) => {
+                    if (room) {
+                        isEditingRoom.value = true;
+                        roomForm.value = { color: '#6366f1', ...room };
+                    } else {
+                        isEditingRoom.value = false;
+                        roomForm.value = { id: 'R' + Date.now().toString().slice(-4), name: '', capacity: 30, color: '#6366f1' };
+                    }
+                    showRoomModal.value = true;
+                };
+
+                const saveRoom = () => {
+                    if (isEditingRoom.value) {
+                        const idx = rooms.value.findIndex(r => r.id === roomForm.value.id);
+                        if (idx !== -1) rooms.value[idx] = { ...roomForm.value };
+                    } else {
+                        rooms.value.push({ ...roomForm.value });
+                    }
+                    localStorage.setItem('simple_rooms', JSON.stringify(rooms.value));
+                    showRoomModal.value = false;
+                    showToast(isEditingRoom.value ? '活動室已更新' : '活動室已新增');
+                };
+
+                const deleteRoom = (id) => {
+                    if (rooms.value.length <= 1) {
+                        showToast('至少需保留一個活動室', 'error');
+                        return;
+                    }
+                    rooms.value = rooms.value.filter(r => r.id !== id);
+                    localStorage.setItem('simple_rooms', JSON.stringify(rooms.value));
+                    showToast('活動室已刪除');
+                };
+
+                // Time Slot Management
+                const openSlotModal = (slot = null) => {
+                    if (slot) {
+                        isEditingSlot.value = true;
+                        slotForm.value = { ...slot };
+                    } else {
+                        isEditingSlot.value = false;
+                        slotForm.value = { id: 'S' + Date.now().toString().slice(-4), time: '09:00 - 10:00' };
+                    }
+                    showSlotModal.value = true;
+                };
+
+                const saveSlot = () => {
+                    if (!slotForm.value.time.trim()) {
+                        showToast('請輸入時間段', 'error');
+                        return;
+                    }
+                    if (isEditingSlot.value) {
+                        const idx = timeSlots.value.findIndex(s => s.id === slotForm.value.id);
+                        if (idx !== -1) timeSlots.value[idx] = { ...slotForm.value };
+                    } else {
+                        timeSlots.value.push({ ...slotForm.value });
+                    }
+                    localStorage.setItem('simple_timeslots', JSON.stringify(timeSlots.value));
+                    showSlotModal.value = false;
+                    showToast(isEditingSlot.value ? '時間段已更新' : '時間段已新增');
+                };
+
+                const deleteSlot = (id) => {
+                    if (timeSlots.value.length <= 1) {
+                        showToast('至少需保留一個時間段', 'error');
+                        return;
+                    }
+                    timeSlots.value = timeSlots.value.filter(s => s.id !== id);
+                    localStorage.setItem('simple_timeslots', JSON.stringify(timeSlots.value));
+                    showToast('時間段已刪除');
+                };
+
+                // CSV Export & Import Methods
+                const downloadRoomsCSV = () => {
+                    let csvContent = "\ufeff編號,名稱,容納人數,標籤顏色\n";
+                    rooms.value.forEach(r => {
+                        csvContent += `"${r.id}","${r.name.replace(/"/g, '""')}","${r.capacity}","${r.color || '#6366f1'}"\n`;
+                    });
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement("a");
+                    link.href = URL.createObjectURL(blob);
+                    link.setAttribute("download", `rooms_${getTodayStr()}.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    showToast('已匯出場地資料 CSV');
+                };
+
+                const uploadRoomsCSV = (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const text = e.target.result;
+                            const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+                            if (lines.length <= 1) {
+                                showToast('CSV 檔案為空或格式不正確', 'error');
+                                return;
+                            }
+                            const newRooms = [];
+                            const startIdx = (lines[0].includes('編號') || lines[0].toLowerCase().includes('id')) ? 1 : 0;
+                            for (let i = startIdx; i < lines.length; i++) {
+                                const cols = lines[i].split(',').map(c => c.replace(/^"|"$/g, '').trim());
+                                if (cols.length >= 2) {
+                                    const id = cols[0] || ('R' + (Date.now() + i).toString().slice(-4));
+                                    const name = cols[1];
+                                    const capacity = parseInt(cols[2]) || 30;
+                                    const color = cols[3] || '#6366f1';
+                                    if (name) {
+                                        newRooms.push({ id, name, capacity, color });
+                                    }
+                                }
+                            }
+                            if (newRooms.length > 0) {
+                                rooms.value = newRooms;
+                                localStorage.setItem('simple_rooms', JSON.stringify(rooms.value));
+                                showToast(`已成功匯入 ${newRooms.length} 個活動室`);
+                            } else {
+                                showToast('未讀取到有效的活動室資料', 'error');
+                            }
+                        } catch (err) {
+                            showToast('解析 CSV 失敗，請確認檔案格式', 'error');
+                        }
+                        event.target.value = '';
+                    };
+                    reader.readAsText(file);
+                };
+
+                const downloadSlotsCSV = () => {
+                    let csvContent = "\ufeff編號,時間段\n";
+                    timeSlots.value.forEach(s => {
+                        csvContent += `"${s.id}","${s.time.replace(/"/g, '""')}"\n`;
+                    });
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement("a");
+                    link.href = URL.createObjectURL(blob);
+                    link.setAttribute("download", `timeslots_${getTodayStr()}.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    showToast('已匯出時間段資料 CSV');
+                };
+
+                const uploadSlotsCSV = (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const text = e.target.result;
+                            const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+                            if (lines.length <= 1) {
+                                showToast('CSV 檔案為空或格式不正確', 'error');
+                                return;
+                            }
+                            const newSlots = [];
+                            const startIdx = (lines[0].includes('編號') || lines[0].toLowerCase().includes('id')) ? 1 : 0;
+                            for (let i = startIdx; i < lines.length; i++) {
+                                const cols = lines[i].split(',').map(c => c.replace(/^"|"$/g, '').trim());
+                                if (cols.length >= 1) {
+                                    const id = cols.length >= 2 ? cols[0] : ('S' + (Date.now() + i).toString().slice(-4));
+                                    const time = cols.length >= 2 ? cols[1] : cols[0];
+                                    if (time) {
+                                        newSlots.push({ id, time });
+                                    }
+                                }
+                            }
+                            if (newSlots.length > 0) {
+                                timeSlots.value = newSlots;
+                                localStorage.setItem('simple_timeslots', JSON.stringify(timeSlots.value));
+                                showToast(`已成功匯入 ${newSlots.length} 個時間段`);
+                            } else {
+                                showToast('未讀取到有效的時間段資料', 'error');
+                            }
+                        } catch (err) {
+                            showToast('解析 CSV 失敗，請確認檔案格式', 'error');
+                        }
+                        event.target.value = '';
+                    };
+                    reader.readAsText(file);
+                };
+
+                const deleteBooking = (id) => {
+                    bookings.value = bookings.value.filter(x => x.id !== id);
+                    saveBookings();
+                    showToast('預約已取消');
+                    syncWithGoogleSheets(false);
+                };
+
+                const saveBookings = () => localStorage.setItem('simple_room_bookings', JSON.stringify(bookings.value));
+                const saveGoogleScriptUrl = () => {
+                    localStorage.setItem('simple_gs_url', googleScriptUrl.value);
+                    showToast('網址已儲存');
+                };
+
+                const syncWithGoogleSheets = async (userInitiated = true) => {
+                    if (!googleScriptUrl.value) {
+                        if (userInitiated) showToast('未設定 Google Apps Script URL', 'error');
+                        return;
+                    }
+                    try {
+                        await fetch(googleScriptUrl.value, {
+                            method: 'POST',
+                            mode: 'no-cors',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(bookings.value)
+                        });
+                        if (userInitiated) showToast('已發送同步請求');
+                    } catch (e) {
+                        if (userInitiated) showToast('同步失敗', 'error');
+                    }
+                };
+
+                onMounted(() => {
+                    const saved = localStorage.getItem('simple_room_bookings');
+                    if (saved) bookings.value = JSON.parse(saved);
+
+                    const savedRooms = localStorage.getItem('simple_rooms');
+                    if (savedRooms) rooms.value = JSON.parse(savedRooms);
+
+                    const savedSlots = localStorage.getItem('simple_timeslots');
+                    if (savedSlots) timeSlots.value = JSON.parse(savedSlots);
+
+                    const savedPw = localStorage.getItem('simple_admin_pw');
+                    if (savedPw) adminPassword.value = savedPw;
+
+                    const savedUrl = localStorage.getItem('simple_gs_url');
+                    if (savedUrl) googleScriptUrl.value = savedUrl;
+
+                    autoAssignRoomColors();
+                });
+
+                return {
+                    currentTab, adminSubTab, toast, selectedDate, viewMode, selectedRoomFilter, presetColors,
+                    timeSlots, rooms, displayedRooms, bookings, weekDays, weekRangeText, monthCalendarDays, currentMonthLabel,
+                    adminDateFilterType, adminFilterDate, filteredAdminBookings,
+                    inputAdminPassword, newAdminPassword, isAdminLoggedIn, googleScriptUrl, showBookingModal, bookingModalTab, selectedBookingDetail, bookingForm, batchForm, weekdayOptions, batchCalculation,
+                    batchMode, csvParsedBookings, csvFileName, csvBatchSummary, downloadBatchCSVTemplate, uploadBatchCSV, submitCSVBatchBooking,
+                    showRoomModal, isEditingRoom, roomForm, showSlotModal, isEditingSlot, slotForm,
+                    getTodayStr, changeDate, navigatePeriod, getRoomName, getRoomColor, getRoomStyle, getRoomBadgeStyle, getSlotName, getBookingForSlot, isSlotOccupied,
+                    getBookingsForDateAndSlot, getBookingsForDate, openBookingModal,
+                    submitBookingForm, submitBatchBooking, verifyAdminPassword, updateAdminPassword, deleteBooking, saveGoogleScriptUrl, syncWithGoogleSheets,
+                    openRoomModal, saveRoom, deleteRoom, openSlotModal, saveSlot, deleteSlot,
+                    downloadRoomsCSV, uploadRoomsCSV, downloadSlotsCSV, uploadSlotsCSV, autoAssignRoomColors
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
+```
+
+### 功能摘要
+1. **支援多種匹配名稱**：CSV 檔內的「場地」欄位可支援填寫 `大禮堂` 或 `R1`；「時間段」欄位可支援 `08:15 - 09:15` 或 `S1`。
+2. **範本下載**：管理員可直接點擊「下載 CSV 預約範本」獲取標準格式檔。
+3. **自動重複與衝突檢測**：自動跳過已預約時段或 CSV 檔案內部重複排程，避免衝突。
+4. **一鍵同步**：批量匯入成功後會自動觸發 Google Sheets 雲端寫入。
